@@ -24,6 +24,8 @@ dependencies:
 - pandoc >= 2.14
 - text
 - bytestring
+- time
+- either
 
 library:
   source-dirs: src

@@ -33,8 +33,10 @@ library
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , either
     , pandoc >=2.14
     , text
+    , time
   default-language: Haskell2010
 
 executable WaChatConverter-exe
@@ -46,8 +48,10 @@ executable WaChatConverter-exe
       WaChatConverter
     , base >=4.7 && <5
     , bytestring
+    , either
     , pandoc >=2.14
     , text
+    , time
   default-language: Haskell2010
 
 test-suite WaChatConverter-test
@@ -62,6 +66,8 @@ test-suite WaChatConverter-test
       WaChatConverter
     , base >=4.7 && <5
     , bytestring
+    , either
     , pandoc >=2.14
     , text
+    , time
   default-language: Haskell2010
