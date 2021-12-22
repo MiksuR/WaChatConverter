@@ -13,5 +13,6 @@ main :: IO ()
 main = do
   chatsPath <- getArgs >>= extractFirstArg
   chats <- BL.readFile chatsPath
-  let doc = createDocument $ parseMessages chats
-  print chats
+  parsed <- either (error . errorMsg) pure (parseMessages chats)
+  let doc = createDocument $ parsed
+  print $ parsed
