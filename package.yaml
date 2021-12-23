@@ -22,10 +22,13 @@ description:         Please see the README on GitHub at <https://github.com/gith
 dependencies:
 - base >= 4.7 && < 5
 - pandoc >= 2.14
+- pandoc-types >= 1.22
+- data-default >= 0.7
 - text
 - bytestring
 - time
 - either
+- containers
 
 library:
   source-dirs: src
