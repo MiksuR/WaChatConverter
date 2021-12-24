@@ -10,6 +10,7 @@ import System.Environment (getArgs)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as E
 
 extractFirstArg :: [String] -> IO String
 extractFirstArg [] = error "No arguments provided"
@@ -20,10 +21,15 @@ main = do
   templRaw <- runIO (getTemplate "template.html") >>= handleError
   Right templ <- compileTemplate "" templRaw :: IO (Either String (Template T.Text))
   chatsPath <- getArgs >>= extractFirstArg
+  -- TODO: Try implement lazy parsing
   chats <- B.readFile chatsPath
   -- TODO: refactor, skip unnecesary parsing
   parsed <- either (error . errorMsg) pure (parseMessages chats)
   let doc = createDocument $ parsed
+  {--
+  pdf <- runIO (writeHtml5String (def {writerTemplate = Just templ}) doc) >>= handleError
+  B.writeFile "out.html" $ E.encodeUtf8 pdf
+  --}
   pdf <- runIO (makePDF "wkhtmltopdf" [] writeHtml5String
                 (def {writerTemplate = Just templ}) doc) >>= handleError
   case pdf of Right b -> BL.writeFile "out.pdf" b
