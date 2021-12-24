@@ -17,14 +17,14 @@ extractFirstArg (x:_) = pure x
 
 main :: IO ()
 main = do
-  templRaw <- runIO (getTemplate "template.tex") >>= handleError
+  templRaw <- runIO (getTemplate "template.html") >>= handleError
   Right templ <- compileTemplate "" templRaw :: IO (Either String (Template T.Text))
   chatsPath <- getArgs >>= extractFirstArg
   chats <- B.readFile chatsPath
   -- TODO: refactor, skip unnecesary parsing
   parsed <- either (error . errorMsg) pure (parseMessages chats)
   let doc = createDocument $ parsed
-  pdf <- runIO (makePDF "pdflatex" [] writeLaTeX
+  pdf <- runIO (makePDF "wkhtmltopdf" [] writeHtml5String
                 (def {writerTemplate = Just templ}) doc) >>= handleError
   case pdf of Right b -> BL.writeFile "out.pdf" b
               Left e -> print e
