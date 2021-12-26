@@ -1,12 +1,11 @@
 module Lib
     (
-      parseMessages,
       createDocument,
-      errorMsg
     ) where
 
 import Text.Pandoc
 import Text.Pandoc.Builder
+import Data.Function ((&))
 import Data.List (foldl')
 import Data.Sequence (Seq)
 import Data.Text.Encoding
@@ -21,19 +20,14 @@ import Data.Time
 
 data Message = Message {
   time :: LocalTime, sender :: B.ByteString, msgText :: B.ByteString
-} deriving Show
+}
 
-data ParseError = ParseError !Int !B.ByteString
+data BlockAcc = BlockAcc {
+  blocks :: [Blocks], prevMsg :: Message
+}
 
-type BlockAcc = (Blocks, [LocalTime], [LocalTime], B.ByteString)
-emptyAcc = (mempty, [], [], C.pack "")
-
-errorMsg :: ParseError -> String
-errorMsg (ParseError line text) = "Could not parse line " ++ show line ++ ": " ++ C.unpack text
-
-parseStr :: (Int, B.ByteString) -> Either ParseError Message
-parseStr (line, str) = maybeToRight parseError $
-                        createMessage <$> date <*> sender
+parseStr :: B.ByteString -> Either B.ByteString Message
+parseStr str = maybeToRight str $ createMessage <$> date <*> sender
   where
     (dateStr, rest) = C.break ('-'==) str
     date = parseTimeM True defaultTimeLocale "%-d.%-m.%-Y klo %-H.%M" $
@@ -42,42 +36,74 @@ parseStr (line, str) = maybeToRight parseError $
     sender = let s = C.drop 2 senderPart in if C.null s then Nothing else Just s
     text = C.drop 2 textPart
     createMessage d s = Message d s text
-    parseError = ParseError line str
 
-parseMessages :: B.ByteString -> Either ParseError [Message]
-parseMessages str = mapM parseStr $ zip [1..] (C.lines str)
+appendToMessage :: Message -> B.ByteString -> Message
+appendToMessage msg str = msg { msgText = C.unlines [(msgText msg), str] }
 
-updateAcc :: BlockAcc -> Message -> BlockAcc
-updateAcc (blocks, months, msgs, lSender) msg = (nBlock, nMonths, nMsgs, nSender)
+times :: BlockAcc -> Message -> (Int, Int, Int, Int)
+times acc msg = (prevDay, prevMonth, curDay, curMonth)
   where
-    nSender = sender msg
-    nMsgs = if lSender == nSender then msgs else msgs ++ [time msg]
-    (_, prevMonth, prevDay) = case msgs of
-                                [] -> (0, 0, 0)
-                                x -> toGregorian . localDay . last $ x
+    (_, prevMonth, prevDay) = toGregorian . localDay . time . prevMsg $ acc
     (_, curMonth, curDay) = toGregorian . localDay . time $ msg
-    nMonths = if prevMonth == curMonth then months else months ++ [time msg]
+
+divClass :: String -> (T.Text, [T.Text], [(T.Text, T.Text)])
+divClass n = (T.pack "", [T.pack n], [])
+
+monthH :: (BlockAcc, Message) -> Blocks
+monthH (acc, msg) = if prevMonth == curMonth then mempty
+                    else divWith (T.pack monthID, [], []) $
+                         header 1 (text (T.pack monthFormat))
+  where
+    (_, prevMonth, _, curMonth) = times acc msg
     monthFormat = formatTime defaultTimeLocale "%B %Y" $ localDay . time $ msg
-    monthH = if prevMonth == curMonth then mempty
-               else header 1 (text (T.pack monthFormat))
-    optionMaker n = (T.pack "", [T.pack n], [])
-    dateText = if prevDay == curDay then mempty
-                else divWith (optionMaker "date") $
-                     plain $ text $ T.pack $
-                     show curDay ++ "." ++ show curMonth ++ "."
-    senderText = if lSender == nSender then mempty
-                else divWith (optionMaker "sender") $
-                     plain $ text (decodeUtf8 nSender `T.append` T.pack ": ")
-    messagePar = divWith (optionMaker "msg") $
-                    plain $ text (decodeUtf8 $ msgText msg)
+    monthID = formatTime defaultTimeLocale "%m%Y" $ localDay . time $ msg
+
+dateP :: (BlockAcc, Message) -> Blocks
+dateP (acc, msg) = if prevDay == curDay && prevMonth == curMonth then mempty
+        else divWith (divClass "date") . para . text . T.pack $
+             show curDay ++ "." ++ show curMonth ++ "."
+  where
+    (prevDay, prevMonth, curDay, curMonth) = times acc msg
+
+senderP :: B.ByteString -> (BlockAcc, Message) -> Blocks
+senderP prevSender (acc, msg) = if prevMonth == curMonth &&
+                                   prevDay == curDay &&
+                                   prevSender == curSender then mempty
+                                else divWith (divClass "sender") . plain .
+                                     text $ decodeUtf8 curSender
+                                     `T.append` T.pack ": "
+  where
+    (prevDay, prevMonth, curDay, curMonth) = times acc msg
+    curSender = sender msg
+
+messageP :: (BlockAcc, Message) -> Blocks
+messageP (_, msg) = divWith (divClass "msg") . plain . text $
+                    decodeUtf8 (msgText msg)
+
+timeP :: (BlockAcc, Message) -> Blocks
+timeP (_, msg) = divWith (divClass "time") . plain . text . T.pack $ timeDay
+  where
     tod = localTimeOfDay . time $ msg
     timeDay = show (todHour tod) ++ ":" ++ show (todMin tod)
-    timeText = divWith (optionMaker "time") $
-                    plain $ text $ T.pack timeDay
-    nBlock = blocks <> monthH <> dateText <> senderText <> messagePar <> timeText
 
-createDocument :: [Message] -> Pandoc
-createDocument msgs = doc $ blocks
+updateAcc :: BlockAcc -> B.ByteString -> BlockAcc
+updateAcc acc msg = BlockAcc nBlocks message
   where
-    toc = undefined
-    (blocks, months, _, _) = foldl' updateAcc emptyAcc msgs
+    parsed = parseStr msg
+    message = case parsed of Right p -> p
+                             Left t -> appendToMessage (prevMsg acc) t
+    br _ = plain linebreak
+    prevSender = case parsed of Right p -> sender p
+                                Left _ -> B.empty
+    nBlock = mconcat $ map ((acc, message) &) [monthH, dateP, br,
+                                               senderP prevSender,
+                                               messageP, timeP, br]
+    nBlocks = case parsed of Right _ -> blocks acc ++ [nBlock]
+                             Left _ -> init (blocks acc) ++ [nBlock]
+
+createDocument :: B.ByteString -> Pandoc
+createDocument msgs = doc . mconcat $ blocks accumulator
+  where
+    zeroTime = LocalTime (ModifiedJulianDay 0) (TimeOfDay 0 0 0)
+    emptyAcc = BlockAcc [] (Message zeroTime B.empty B.empty)
+    accumulator = foldl' updateAcc emptyAcc $ C.lines msgs

@@ -23,14 +23,12 @@ main = do
   chatsPath <- getArgs >>= extractFirstArg
   -- TODO: Try implement lazy parsing
   chats <- B.readFile chatsPath
-  -- TODO: refactor, skip unnecesary parsing
-  parsed <- either (error . errorMsg) pure (parseMessages chats)
-  let doc = createDocument $ parsed
+  let doc = createDocument chats
   {--
   pdf <- runIO (writeHtml5String (def {writerTemplate = Just templ}) doc) >>= handleError
   B.writeFile "out.html" $ E.encodeUtf8 pdf
   --}
-  pdf <- runIO (makePDF "wkhtmltopdf" [] writeHtml5String
+  pdf <- runIO (makePDF "wkhtmltopdf" ["toc","--enable-internal-links"] writeHtml5String
                 (def {writerTemplate = Just templ}) doc) >>= handleError
   case pdf of Right b -> BL.writeFile "out.pdf" b
               Left e -> print e
