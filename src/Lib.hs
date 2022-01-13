@@ -30,7 +30,7 @@ parseStr :: B.ByteString -> Either B.ByteString Message
 parseStr str = maybeToRight str $ createMessage <$> date <*> sender
   where
     (dateStr, rest) = C.break ('-'==) str
-    date = parseTimeM True defaultTimeLocale "%-d.%-m.%-Y klo %-H.%M" $
+    date = parseTimeM True defaultTimeLocale "%d/%m/%Y, %H:%M" $
                             C.unpack dateStr :: Maybe LocalTime
     (senderPart, textPart) = C.break (':'==) rest
     sender = let s = C.drop 2 senderPart in if C.null s then Nothing else Just s
@@ -107,6 +107,7 @@ updateAcc acc msg = BlockAcc nBlocks message nSender
                                init (blocks acc) ++
                                [dateText <> nBlock]
 
+-- TODO: Generate a nice title
 createDocument :: B.ByteString -> Pandoc
 createDocument msgs = changeMargins . doc . mconcat $ blocks accumulator
   where
