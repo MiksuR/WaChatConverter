@@ -23,7 +23,7 @@ data Message = Message {
 }
 
 data BlockAcc = BlockAcc {
-  blocks :: [Blocks], prevMsg :: Message
+  blocks :: [Blocks], prevMsg :: Message, prevSender :: B.ByteString
 }
 
 parseStr :: B.ByteString -> Either B.ByteString Message
@@ -68,7 +68,8 @@ dateP (acc, msg) = if prevDay == curDay && prevMonth == curMonth then mempty
 senderP :: B.ByteString -> (BlockAcc, Message) -> Blocks
 senderP prevSender (acc, msg) = if prevMonth == curMonth &&
                                    prevDay == curDay &&
-                                   prevSender == curSender
+                                   (prevSender == curSender ||
+                                   B.null curSender)
                                 then divWith (divClass "sender") (Many Empty)
                                 else divWith (divClass "sender") . plain .
                                      text $ decodeUtf8 curSender
@@ -85,20 +86,19 @@ messageP (_, msg) = divWith (divClass "msg") . plain . mconcat .
 timeP :: (BlockAcc, Message) -> Blocks
 timeP (_, msg) = divWith (divClass "time") . plain . text . T.pack $ timeDay
   where
-    tod = localTimeOfDay . time $ msg
-    timeDay = show (todHour tod) ++ ":" ++ show (todMin tod)
+    timeDay = formatTime defaultTimeLocale "%H:%M" (time msg)
 
 updateAcc :: BlockAcc -> B.ByteString -> BlockAcc
-updateAcc acc msg = BlockAcc nBlocks message
+updateAcc acc msg = BlockAcc nBlocks message nSender
   where
     parsed = parseStr msg
     message = case parsed of Right p -> p
                              Left t -> appendToMessage (prevMsg acc) t
-    prevSender = case parsed of Right p -> sender p
-                                Left _ -> B.empty
+    nSender = case parsed of Right p -> sender p
+                             Left _ -> B.empty
     nBlock = (divWith (divClass "block")) . mconcat .
              (map ((acc, message) &)) $
-             [senderP prevSender, messageP, timeP]
+             [senderP (prevSender acc), messageP, timeP]
     dateText = monthH (acc, message) <> dateP (acc, message)
     nBlocks = case parsed of Right _ ->
                                blocks acc ++
@@ -113,5 +113,5 @@ createDocument msgs = changeMargins . doc . mconcat $ blocks accumulator
     changeMargins = setMeta (T.pack "margin-left") "0.7in" .
                    setMeta (T.pack "margin-right") "0.5in"
     zeroTime = LocalTime (ModifiedJulianDay 0) (TimeOfDay 0 0 0)
-    emptyAcc = BlockAcc [] (Message zeroTime B.empty B.empty)
+    emptyAcc = BlockAcc [] (Message zeroTime B.empty B.empty) B.empty
     accumulator = foldl' updateAcc emptyAcc $ C.lines msgs
