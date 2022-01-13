@@ -108,8 +108,10 @@ updateAcc acc msg = BlockAcc nBlocks message
                                [dateText <> nBlock]
 
 createDocument :: B.ByteString -> Pandoc
-createDocument msgs = doc . mconcat $ blocks accumulator
+createDocument msgs = changeMargins . doc . mconcat $ blocks accumulator
   where
+    changeMargins = setMeta (T.pack "margin-left") "0.7in" .
+                   setMeta (T.pack "margin-right") "0.5in"
     zeroTime = LocalTime (ModifiedJulianDay 0) (TimeOfDay 0 0 0)
     emptyAcc = BlockAcc [] (Message zeroTime B.empty B.empty)
     accumulator = foldl' updateAcc emptyAcc $ C.lines msgs

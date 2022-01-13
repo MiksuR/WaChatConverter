@@ -8,10 +8,19 @@ h1 {
 }
 
 .block {
+  display: -webkit-box;
   display: flex;
 }
 
+.sender {
+  -webkit-box-flex: 0;
+  width: 2.5em;
+  flex-shrink: 0;
+  flex-basis: 2.5em;
+}
+
 .msg {
+  -webkit-box-flex: 1;
   flex-grow: 1;
   background: #b0ffb0;
   border-radius: 5px;
@@ -21,11 +30,7 @@ h1 {
 .time {
   align-self: flex-end;
   margin-left: 5px;
-}
-
-.sender {
-  flex-shrink: 0;
-  flex-basis: 2.5em;
+  margin-right: 0;
 }
 
 img.emoji {
