@@ -6,8 +6,8 @@ module Lib
 import Text.Pandoc
 import Text.Pandoc.Builder
 import Data.Function ((&))
-import Data.List (foldl')
-import Data.Sequence (Seq)
+import Data.List (foldl', intersperse)
+import Data.Sequence ( Seq(Empty) )
 import Data.Text.Encoding
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -46,7 +46,7 @@ times acc msg = (prevDay, prevMonth, curDay, curMonth)
     (_, prevMonth, prevDay) = toGregorian . localDay . time . prevMsg $ acc
     (_, curMonth, curDay) = toGregorian . localDay . time $ msg
 
-divClass :: String -> (T.Text, [T.Text], [(T.Text, T.Text)])
+divClass :: String -> Attr
 divClass n = (T.pack "", [T.pack n], [])
 
 monthH :: (BlockAcc, Message) -> Blocks
@@ -68,7 +68,8 @@ dateP (acc, msg) = if prevDay == curDay && prevMonth == curMonth then mempty
 senderP :: B.ByteString -> (BlockAcc, Message) -> Blocks
 senderP prevSender (acc, msg) = if prevMonth == curMonth &&
                                    prevDay == curDay &&
-                                   prevSender == curSender then mempty
+                                   prevSender == curSender
+                                then divWith (divClass "sender") (Many Empty)
                                 else divWith (divClass "sender") . plain .
                                      text $ decodeUtf8 curSender
                                      `T.append` T.pack ": "
@@ -77,8 +78,9 @@ senderP prevSender (acc, msg) = if prevMonth == curMonth &&
     curSender = sender msg
 
 messageP :: (BlockAcc, Message) -> Blocks
-messageP (_, msg) = divWith (divClass "msg") . plain . text $
-                    decodeUtf8 (msgText msg)
+messageP (_, msg) = divWith (divClass "msg") . plain . mconcat .
+                    (intersperse linebreak) $
+                    map (text . decodeUtf8) (C.lines . msgText $ msg)
 
 timeP :: (BlockAcc, Message) -> Blocks
 timeP (_, msg) = divWith (divClass "time") . plain . text . T.pack $ timeDay
@@ -92,14 +94,18 @@ updateAcc acc msg = BlockAcc nBlocks message
     parsed = parseStr msg
     message = case parsed of Right p -> p
                              Left t -> appendToMessage (prevMsg acc) t
-    br _ = plain linebreak
     prevSender = case parsed of Right p -> sender p
                                 Left _ -> B.empty
-    nBlock = mconcat $ map ((acc, message) &) [monthH, dateP, br,
-                                               senderP prevSender,
-                                               messageP, timeP, br]
-    nBlocks = case parsed of Right _ -> blocks acc ++ [nBlock]
-                             Left _ -> init (blocks acc) ++ [nBlock]
+    nBlock = (divWith (divClass "block")) . mconcat .
+             (map ((acc, message) &)) $
+             [senderP prevSender, messageP, timeP]
+    dateText = monthH (acc, message) <> dateP (acc, message)
+    nBlocks = case parsed of Right _ ->
+                               blocks acc ++
+                               [dateText <> nBlock]
+                             Left _ ->
+                               init (blocks acc) ++
+                               [dateText <> nBlock]
 
 createDocument :: B.ByteString -> Pandoc
 createDocument msgs = doc . mconcat $ blocks accumulator
