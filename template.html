@@ -20,9 +20,13 @@ $endif$
 $for(css)$
   <link rel="stylesheet" href="$css$" />
 $endfor$
-<style>
-  $styles.html()$
-</style>
+  <style>
+    $styles.html()$
+  </style>
+  <script src="https://twemoji.maxcdn.com/v/latest/twemoji.min.js" crossorigin="anonymous"></script>
+  <script>
+    window.onload = function () {twemoji.parse(document.body);}
+  </script>
 $if(math)$
   $math$
 $endif$
