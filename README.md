@@ -10,6 +10,10 @@ and compiles the page into a pdf using `wkhtmltopdf`.
 This project is built with `stack`. Make sure you have `stack` and `wkhtmltopdf`
 installed. The application is run with `stack run [path to chat.txt]`.
 
+> [!NOTE]
+> The app requires the version of `wkhtmltopdf` with the Qt patch.
+> On Arch, you need to install the `wkhtmltopdf-static` package from AUR.
+
 ## Parsing doesn't work
 
 WhatsApp might change the format of the .txt file in the future,
